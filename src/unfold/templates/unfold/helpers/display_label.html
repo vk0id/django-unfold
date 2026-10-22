@@ -1,5 +1,9 @@
 {% if label %}
-    {% if multiple %}
+    {% if individual_colors %}
+        {% for label_type, item in label %}
+            {% include "unfold/helpers/label.html" with type=label_type text=item %}
+        {% endfor %}
+    {% elif multiple %}
         {% for item in label %}
             {% include "unfold/helpers/label.html" with type=label_type text=item %}
         {% endfor %}

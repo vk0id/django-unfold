@@ -89,6 +89,7 @@ CONFIG_DEFAULTS = {
     "ENVIRONMENT_TITLE_PREFIX": None,
     "STYLES": [],
     "SCRIPTS": [],
+    "USER_AVATAR": None,
     "ACCOUNT": {
         "navigation": [],
     },

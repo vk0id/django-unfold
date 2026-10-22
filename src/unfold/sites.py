@@ -84,6 +84,7 @@ class UnfoldAdminSite(AdminSite):
                 self._get_config("LANGUAGES", request).get("action"), request
             ),
             "account_links": self._get_account_links(request),
+            "user_avatar": self._get_config("USER_AVATAR", request),
             "tab_list": self.get_tabs_list(request),
             "styles": self._get_list("STYLES", request),
             "scripts": self._get_list("SCRIPTS", request),

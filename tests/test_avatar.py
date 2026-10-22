@@ -209,3 +209,160 @@ def test_user_avatar_callback_can_supply_required_size(settings, admin_request):
     result = render_navigation(UnfoldAdminSite(), admin_request)
 
     assert "background-image: url('/avatar-small.webp')" in result
+
+
+def request_badge_count(request):
+    return request.badge_count
+
+
+@pytest.mark.parametrize("configured_count", [None, 0, 12])
+def test_user_badge_count_static_value(settings, admin_request, configured_count):
+    settings.UNFOLD = {"USER_BADGE_COUNT": configured_count}
+    admin_request.user.avatar_badge_count = 7
+    admin_request.user.avatar_badge_url = "/alerts/"
+
+    result = render_navigation(UnfoldAdminSite(), admin_request)
+
+    if configured_count == 0:
+        assert 'href="/alerts/"' not in result
+    else:
+        expected = 7 if configured_count is None else 12
+        assert re.search(r">\s*" + str(expected) + r"\s*</a>", result)
+
+
+@pytest.mark.parametrize(
+    "callback", [request_badge_count, "tests.test_avatar.request_badge_count"]
+)
+@pytest.mark.parametrize("count", [None, 0, 12])
+def test_user_badge_count_callback(settings, admin_request, callback, count):
+    settings.UNFOLD = {"USER_BADGE_COUNT": callback}
+    admin_request.badge_count = count
+    admin_request.user.avatar_badge_count = 7
+    admin_request.user.avatar_badge_url = "/alerts/"
+
+    result = render_navigation(UnfoldAdminSite(), admin_request)
+
+    if count == 0:
+        assert 'href="/alerts/"' not in result
+    else:
+        expected = 7 if count is None else 12
+        assert re.search(r">\s*" + str(expected) + r"\s*</a>", result)
+
+
+def test_user_badge_count_uses_current_request(settings, admin_request, user_factory):
+    settings.UNFOLD = {"USER_BADGE_COUNT": request_badge_count}
+    admin_request.badge_count = 3
+    admin_request.user.avatar_badge_url = "/alerts/"
+    other_request = RequestFactory().get("/admin/")
+    other_request.user = user_factory()
+    other_request.user.avatar_badge_url = "/alerts/"
+    other_request.badge_count = 5
+    site = UnfoldAdminSite()
+
+    first_result = render_navigation(site, admin_request)
+    other_result = render_navigation(site, other_request)
+
+    assert re.search(r">\s*3\s*</a>", first_result)
+    assert not re.search(r">\s*5\s*</a>", first_result)
+    assert re.search(r">\s*5\s*</a>", other_result)
+    assert not re.search(r">\s*3\s*</a>", other_result)
+
+
+def test_user_badge_count_custom_site_preserves_zero(settings, admin_request):
+    settings.UNFOLD = {"USER_BADGE_COUNT": 12}
+    settings.OTHER_ADMIN = {"USER_BADGE_COUNT": 0}
+    admin_request.user.avatar_badge_count = 7
+    admin_request.user.avatar_badge_url = "/alerts/"
+    site = UnfoldAdminSite()
+    site.settings_name = "OTHER_ADMIN"
+
+    result = render_navigation(site, admin_request)
+
+    assert 'href="/alerts/"' not in result
+
+
+def test_user_badge_count_callback_accepts_anonymous_request(settings):
+    def count(request):
+        if request.user.is_authenticated:
+            return 12
+        return None
+
+    settings.UNFOLD = {"USER_BADGE_COUNT": count}
+    request = RequestFactory().get("/admin/login/")
+    request.user = AnonymousUser()
+
+    context = UnfoldAdminSite().each_context(request)
+
+    assert context["user_badge_count"] is None
+
+
+@pytest.mark.parametrize("count", [0, 12])
+def test_badge_count_override_does_not_evaluate_legacy_count(count):
+    class UserWithoutLegacyCountAccess:
+        avatar_url = "/avatar.webp"
+
+        @property
+        def avatar_badge_count(self):
+            raise AssertionError(
+                "A configured count must not evaluate the legacy count"
+            )
+
+    result = render_to_string(
+        "unfold/helpers/avatar.html",
+        {"user": UserWithoutLegacyCountAccess(), "badge_count": count},
+    )
+
+    if count:
+        assert re.search(r">\s*12\s*</div>", result)
+    else:
+        assert not re.search(r">\s*0\s*</div>", result)
+
+
+def test_zero_badge_count_preserves_variant_only_badge(settings, admin_request):
+    settings.UNFOLD = {"USER_BADGE_COUNT": 0}
+    admin_request.user.avatar_badge_count = 7
+    admin_request.user.avatar_badge_variant = "danger"
+    admin_request.user.avatar_badge_url = "/alerts/"
+
+    result = render_navigation(UnfoldAdminSite(), admin_request)
+
+    assert 'href="/alerts/"' in result
+    assert "bg-red-600" in result
+    assert not re.search(r">\s*[07]\s*</a>", result)
+
+
+def test_badge_count_legacy_no_argument_method():
+    class LegacyUser:
+        avatar_url = "/legacy.webp"
+
+        def avatar_badge_count(self):
+            return 7
+
+    result = render_to_string("unfold/helpers/avatar.html", {"user": LegacyUser()})
+
+    assert re.search(r">\s*7\s*</div>", result)
+
+
+def test_badge_count_component_does_not_use_other_user_callback(
+    settings, admin_request, user_factory
+):
+    settings.UNFOLD = {"USER_BADGE_COUNT": 12}
+    other_user = user_factory()
+    other_user.avatar_badge_count = 7
+    context = UnfoldAdminSite().each_context(admin_request)
+    context["user"] = other_user
+
+    result = render_to_string("unfold/helpers/avatar.html", context)
+
+    assert re.search(r">\s*7\s*</div>", result)
+    assert not re.search(r">\s*12\s*</div>", result)
+
+
+def test_user_badge_count_text_is_escaped(settings, admin_request):
+    settings.UNFOLD = {"USER_BADGE_COUNT": "<b>7</b>"}
+    admin_request.user.avatar_badge_url = "/alerts/"
+
+    result = render_navigation(UnfoldAdminSite(), admin_request)
+
+    assert "&lt;b&gt;7&lt;/b&gt;" in result
+    assert "<b>7</b>" not in result

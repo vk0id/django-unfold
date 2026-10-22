@@ -85,6 +85,10 @@ class UnfoldAdminSite(AdminSite):
             ),
             "account_links": self._get_account_links(request),
             "user_avatar": self._get_config("USER_AVATAR", request),
+            # Resolve directly so a configured zero is preserved.
+            "user_badge_count": self._get_value(
+                get_config(self.settings_name)["USER_BADGE_COUNT"], request
+            ),
             "tab_list": self.get_tabs_list(request),
             "styles": self._get_list("STYLES", request),
             "scripts": self._get_list("SCRIPTS", request),

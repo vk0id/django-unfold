@@ -1,9 +1,14 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from html.parser import HTMLParser
 from http import HTTPStatus
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.db.models import DateField
+from django.db.models.functions import TruncDate
 from django.urls import reverse_lazy
+from django.utils import timezone, translation
 from django.utils.timezone import now
 from example.models import (
     ApprovalChoices,
@@ -1004,3 +1009,111 @@ def test_filters_autocomplete_select_multiple_filter(
 
     for user in not_expected:
         assert not response.context_data["cl"].queryset.filter(username=user).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("use_tz", [False, True])
+@pytest.mark.parametrize("field_type", ["date", "datetime"])
+@pytest.mark.parametrize("custom_name", [False, True])
+@pytest.mark.parametrize(
+    "language, date_from, date_to, expected",
+    [
+        ("en", "2026-03-29", "2026-03-29", ["start", "middle", "end"]),
+        ("de", "29.03.2026", "29.03.2026", ["start", "middle", "end"]),
+        ("en", "", "2026-03-29", ["before", "start", "middle", "end"]),
+        ("en", "2026-03-29", "", ["start", "middle", "end", "after"]),
+        ("en", "", "", ["before", "start", "middle", "end", "after"]),
+    ],
+)
+def test_date_range_boundaries(
+    admin_request,
+    user_model_admin,
+    user_factory,
+    settings,
+    field_type,
+    custom_name,
+    language,
+    date_from,
+    date_to,
+    expected,
+    use_tz,
+):
+    settings.USE_TZ = use_tz
+    settings.TIME_ZONE = "UTC"
+    local_zone = ZoneInfo("Europe/Berlin")
+    values = {
+        "before": datetime(2026, 3, 28, 23, 59, 59, tzinfo=local_zone),
+        "start": datetime(2026, 3, 29, tzinfo=local_zone),
+        "middle": datetime(2026, 3, 29, 12, tzinfo=local_zone),
+        "end": datetime(2026, 3, 29, 23, 59, 59, 999999, tzinfo=local_zone),
+        "after": datetime(2026, 3, 30, tzinfo=local_zone),
+    }
+    for username, value in values.items():
+        user_factory.create(
+            username=username,
+            date_joined=value if use_tz else value.replace(tzinfo=None),
+        )
+    model = get_user_model()
+    field_path = "date_joined" if field_type == "datetime" else "joined_day"
+    parameter_name = "joined" if custom_name else field_path
+
+    class DateFilter(RangeDateFilter):
+        pass
+
+    if custom_name:
+        DateFilter.parameter_name = parameter_name
+    params = {
+        f"{parameter_name}_from": [date_from],
+        f"{parameter_name}_to": [date_to],
+    }
+    with timezone.override(local_zone), translation.override(language):
+        queryset = model.objects.filter(username__in=values)
+        if field_type == "date":
+            queryset = queryset.annotate(joined_day=TruncDate("date_joined"))
+            field = DateField(verbose_name="Joined day")
+        else:
+            field = model._meta.get_field(field_path)
+        spec = DateFilter(
+            field, admin_request, params, model, user_model_admin, field_path
+        )
+        result = spec.queryset(admin_request, queryset)
+        assert result is not None
+        assert set(result.values_list("username", flat=True)) == set(expected)
+        assert params == {}
+        form = next(spec.choices(None))["form"]
+        assert form.is_valid()
+        assert form[f"{parameter_name}_from"].value() == date_from
+        assert form[f"{parameter_name}_to"].value() == date_to
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("facet", [False, True])
+def test_date_range_empty_parameters_render_once(admin_client, facet):
+    response = admin_client.get(
+        reverse_lazy("admin:example_filteruser_changelist"),
+        data={
+            "date_joined_from": "",
+            "date_joined_to": "",
+            **({"_facets": "True"} if facet else {}),
+        },
+    )
+    assert response.status_code == HTTPStatus.OK
+    inputs = []
+
+    class FilterFormParser(HTMLParser):
+        in_filter_form = False
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "form":
+                self.in_filter_form = attrs.get("id") == "filter-form"
+            if self.in_filter_form and tag == "input":
+                inputs.append(attrs.get("name"))
+
+        def handle_endtag(self, tag):
+            if tag == "form":
+                self.in_filter_form = False
+
+    FilterFormParser().feed(response.content.decode())
+    assert inputs.count("date_joined_from") == 1
+    assert inputs.count("date_joined_to") == 1

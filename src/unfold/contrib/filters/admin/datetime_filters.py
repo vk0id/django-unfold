@@ -1,5 +1,7 @@
 from collections.abc import Iterator
+from datetime import datetime, time
 
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.admin.options import ModelAdmin
 from django.contrib.admin.views.main import ChangeList
@@ -8,9 +10,10 @@ from django.db.models import Model, QuerySet
 from django.db.models.fields import DateField, DateTimeField, Field
 from django.forms import ValidationError
 from django.http import HttpRequest
+from django.utils import timezone
 
 from unfold.contrib.filters.forms import RangeDateForm, RangeDateTimeForm
-from unfold.utils import parse_date_str, parse_datetime_str
+from unfold.utils import parse_datetime_str
 
 
 class RangeDateFilter(admin.FieldListFilter):
@@ -28,6 +31,7 @@ class RangeDateFilter(admin.FieldListFilter):
         model_admin: ModelAdmin,
         field_path: str,
     ) -> None:
+        self.parameter_name = self.parameter_name or field_path
         super().__init__(field, request, params, model, model_admin, field_path)
         if not isinstance(field, DateField):
             raise TypeError(
@@ -35,38 +39,32 @@ class RangeDateFilter(admin.FieldListFilter):
             )
 
         self.request = request
-        if self.parameter_name is None:
-            self.parameter_name = self.field_path
-
-        if self.parameter_name + "_from" in params:
-            value = params.pop(self.field_path + "_from")
-            value = value[0] if isinstance(value, list) else value
-
-            if value not in EMPTY_VALUES:
-                self.used_parameters[self.field_path + "_from"] = value
-
-        if self.parameter_name + "_to" in params:
-            value = params.pop(self.field_path + "_to")
-            value = value[0] if isinstance(value, list) else value
-
-            if value not in EMPTY_VALUES:
-                self.used_parameters[self.field_path + "_to"] = value
+        for parameter, value in self.used_parameters.items():
+            self.used_parameters[parameter] = (
+                value[0] if isinstance(value, list) else value
+            )
 
     def queryset(self, request: HttpRequest, queryset: QuerySet) -> QuerySet | None:
-        filters = {}
-
-        value_from = self.used_parameters.get(f"{self.parameter_name}_from")
-        if value_from not in EMPTY_VALUES and isinstance(value_from, str):
-            filters.update({f"{self.parameter_name}__gte": parse_date_str(value_from)})
-
-        value_to = self.used_parameters.get(f"{self.parameter_name}_to")
-        if value_to not in EMPTY_VALUES and isinstance(value_to, str):
-            filters.update({f"{self.parameter_name}__lte": parse_date_str(value_to)})
-
-        try:
-            return queryset.filter(**filters)
-        except (ValueError, ValidationError):
+        form = self.form_class(name=self.parameter_name, data=self.used_parameters)
+        if not form.is_valid():
             return None
+
+        filters = {}
+        for suffix, lookup, boundary in (
+            ("from", "gte", time.min),
+            ("to", "lte", time.max),
+        ):
+            value = form.cleaned_data[f"{self.parameter_name}_{suffix}"]
+            if value is None:
+                continue
+            if isinstance(self.field, DateTimeField):
+                # A date range includes the entire day in the active time zone.
+                value = datetime.combine(value, boundary)
+                if settings.USE_TZ:
+                    value = timezone.make_aware(value)
+            filters[f"{self.field_path}__{lookup}"] = value
+
+        return queryset.filter(**filters)
 
     def expected_parameters(self) -> list[str | None]:
         return [

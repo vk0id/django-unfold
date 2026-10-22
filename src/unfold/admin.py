@@ -15,6 +15,7 @@ from django.contrib.contenttypes.admin import (
 )
 from django.db.models import BLANK_CHOICE_DASH, Model
 from django.http import HttpRequest, HttpResponse
+from django.template.response import TemplateResponse
 from django.urls import URLPattern, path
 from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -88,33 +89,43 @@ class ModelAdmin(
         if hasattr(self, "nested_formset_media"):
             media += self.nested_formset_media
 
-        if not hasattr(self, "request"):
-            return media
-
-        for filter in self.get_list_filter(self.request):
-            if (
-                isinstance(filter, tuple | list)
-                and hasattr(filter[1], "form_class")
-                and hasattr(filter[1].form_class, "Media")
-            ):
-                media += forms.Media(filter[1].form_class.Media)
-            elif hasattr(filter, "form_class") and hasattr(filter.form_class, "Media"):
-                media += forms.Media(filter.form_class.Media)
-
         return media
+
+    def _add_filter_media(
+        self, request: HttpRequest, response: HttpResponse
+    ) -> HttpResponse:
+        if (
+            not isinstance(response, TemplateResponse)
+            or not response.context_data
+            or "media" not in response.context_data
+        ):
+            return response
+
+        # Registered admins are shared; filter media must use this response's request.
+        media = response.context_data["media"]
+        for list_filter in self.get_list_filter(request):
+            filter_class = (
+                list_filter[1] if isinstance(list_filter, tuple | list) else list_filter
+            )
+            form_class = getattr(filter_class, "form_class", None)
+            form_media = getattr(form_class, "Media", None)
+            if form_media is not None:
+                media += forms.Media(form_media)
+
+        response.context_data["media"] = media
+        return response
 
     @xframe_options_sameorigin
     def changelist_view(
         self, request: HttpRequest, extra_context: dict[str, Any] | None = None
     ) -> HttpResponse:
-        self.request = request
-
         if self.ordering_field and self.ordering_field not in self.list_editable:
             list_editable = list(getattr(self, "list_editable", []))
             list_editable.append(self.ordering_field)
             self.list_editable = list_editable
 
-        return super().changelist_view(request, extra_context)
+        response = super().changelist_view(request, extra_context)
+        return self._add_filter_media(request, response)
 
     @xframe_options_sameorigin
     def changeform_view(
@@ -130,6 +141,7 @@ class ModelAdmin(
         helpers.Fieldline = Fieldline  # ty:ignore
 
         response = super().changeform_view(request, object_id, form_url, extra_context)
+        response = self._add_filter_media(request, response)
 
         if self._show_ui_warnings(request):
             self._display_autocomplete_fields_warnings(request)

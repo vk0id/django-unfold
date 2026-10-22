@@ -24,7 +24,6 @@ class DatasetModelAdminMixin(ModelAdmin):
         form_url: str = "",
         extra_context: dict[str, Any] | None = None,
     ) -> HttpResponse:
-        self.request = request
         extra_context = extra_context or {}
         datasets = self.get_changeform_datasets(request)
 

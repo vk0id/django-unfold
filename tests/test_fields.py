@@ -5,9 +5,14 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import ReadOnlyPasswordHashWidget
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.template.loader import render_to_string
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy
 from example.admin import UserAdmin
 from example.models import User
 
+from unfold.decorators import display
 from unfold.fields import (
     UnfoldAdminAutocompleteModelChoiceField,
     UnfoldAdminField,
@@ -505,3 +510,156 @@ def test_unfold_json_schema_field_import_from_dotted_path_is_not_callable():
         "The imported schema object from 'tests.test_fields.NOT_CALLABLE' must be callable."
         in str(e.value)
     )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("value", "label", "expected_text", "color", "count"),
+    [
+        ("Active", True, "Active", "bg-base-500/8", 1),
+        ("active", {"active": "success"}, "active", "bg-green-100", 1),
+        (
+            ("approved", "Approved"),
+            {"approved": "success"},
+            "Approved",
+            "bg-green-100",
+            1,
+        ),
+        (
+            ("rejected", gettext_lazy("Rejected")),
+            {"rejected": "danger"},
+            "Rejected",
+            "bg-red-100",
+            1,
+        ),
+        (["First", "Second"], True, "Second", "bg-base-500/8", 2),
+        (None, True, "-", "", 0),
+        ("", True, "-", "", 0),
+        ([], True, "-", "", 0),
+        (
+            "<script>alert(1)</script>",
+            True,
+            "&lt;script&gt;alert(1)&lt;/script&gt;",
+            "bg-base-500/8",
+            1,
+        ),
+        (mark_safe("<b>Trusted</b>"), True, "<b>Trusted</b>", "bg-base-500/8", 1),
+    ],
+)
+def test_unfold_admin_readonly_display_label(
+    user_factory, value, label, expected_text, color, count
+):
+    class LabelledUserAdmin(UserAdmin):
+        @display(label=label)
+        def labelled_state(self, obj):
+            return value
+
+    readonly_field = UnfoldAdminReadonlyField(
+        form=ExampleForm(instance=user_factory()),
+        field="labelled_state",
+        is_first=True,
+        model_admin=LabelledUserAdmin(User, UnfoldAdminSite()),
+    )
+
+    result = readonly_field.contents()
+
+    assert result.count("<span") == count
+    assert expected_text in result
+    assert color in result
+    assert "<script>" not in result
+    if isinstance(value, tuple):
+        assert value[0] not in result
+    if isinstance(value, list) and value:
+        assert "First" in result
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("outline", [False, True])
+def test_unfold_admin_readonly_label_template(user_factory, outline):
+    class LabelledUserAdmin(UserAdmin):
+        @display(label={"approved": "success"})
+        def labelled_state(self, obj):
+            return "approved", "Approved"
+
+    readonly_field = UnfoldAdminReadonlyField(
+        form=ExampleForm(instance=user_factory()),
+        field="labelled_state",
+        is_first=True,
+        model_admin=LabelledUserAdmin(User, UnfoldAdminSite()),
+    )
+
+    result = render_to_string(
+        "unfold/helpers/field_readonly_value.html",
+        {"field": readonly_field, "outline": outline},
+    )
+
+    assert "bg-green-100" in result
+    assert "Approved" in result
+    assert "approved" not in result
+    assert "&lt;span" not in result
+
+
+@pytest.mark.django_db
+def test_unfold_admin_readonly_label_preprocessing(user_factory):
+    def wrap_contents(contents):
+        return format_html("<section>{}</section>", contents)
+
+    class LabelledUserAdmin(UserAdmin):
+        readonly_preprocess_fields = {"labelled_state": wrap_contents}
+
+        @display(label=True)
+        def labelled_state(self, obj):
+            return "Active"
+
+    readonly_field = UnfoldAdminReadonlyField(
+        form=ExampleForm(instance=user_factory()),
+        field="labelled_state",
+        is_first=True,
+        model_admin=LabelledUserAdmin(User, UnfoldAdminSite()),
+    )
+
+    result = readonly_field.contents()
+
+    assert result.startswith("<section>")
+    assert result.endswith("</section>")
+    assert "<span" in result
+    assert "Active" in result
+    assert "&lt;span" not in result
+
+
+@pytest.mark.django_db
+def test_unfold_admin_readonly_label_takes_precedence_over_boolean(user_factory):
+    class LabelledUserAdmin(UserAdmin):
+        @display(label=True, boolean=True)
+        def labelled_state(self, obj):
+            return True
+
+    readonly_field = UnfoldAdminReadonlyField(
+        form=ExampleForm(instance=user_factory()),
+        field="labelled_state",
+        is_first=True,
+        model_admin=LabelledUserAdmin(User, UnfoldAdminSite()),
+    )
+
+    result = readonly_field.contents()
+
+    assert "<span" in result
+    assert "True" in result
+    assert "check_small" not in result
+
+
+@pytest.mark.django_db
+def test_unfold_admin_readonly_label_disabled(user_factory):
+    class LabelledUserAdmin(UserAdmin):
+        @display(label=False)
+        def labelled_state(self, obj):
+            return "Active"
+
+    readonly_field = UnfoldAdminReadonlyField(
+        form=ExampleForm(instance=user_factory()),
+        field="labelled_state",
+        is_first=True,
+        model_admin=LabelledUserAdmin(User, UnfoldAdminSite()),
+    )
+
+    assert readonly_field.contents() == "Active"

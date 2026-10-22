@@ -60,7 +60,18 @@ def display_for_label(value: Any, empty_value_display: str, label: Any) -> SafeT
     label_type = None
     multiple = False
 
-    if isinstance(label, dict):
+    individual_colors = (
+        isinstance(label, dict)
+        and isinstance(value, list)
+        and all(
+            isinstance(item, tuple) and len(item) == 2  # noqa: PLR2004
+            for item in value
+        )
+    )
+
+    if individual_colors:
+        value = [(label.get(key), text) for key, text in value]
+    elif isinstance(label, dict):
         if isinstance(value, tuple):
             try:
                 label_type = label[value[0]]
@@ -80,6 +91,7 @@ def display_for_label(value: Any, empty_value_display: str, label: Any) -> SafeT
                 "label": value,
                 "label_type": label_type,
                 "multiple": multiple,
+                "individual_colors": individual_colors,
             },
         )
     )

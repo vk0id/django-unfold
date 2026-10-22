@@ -150,3 +150,9 @@ class RelatedDropdownFilter(ValueMixin, DropdownMixin, admin.RelatedFieldListFil
 
 class MultipleRelatedDropdownFilter(MultiValueMixin, RelatedDropdownFilter):
     multiple = True
+
+
+class RelatedOnlyDropdownFilter(
+    RelatedDropdownFilter, admin.RelatedOnlyFieldListFilter
+):
+    """Limit dropdown choices to objects referenced by the admin's queryset."""

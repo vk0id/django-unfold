@@ -29,6 +29,9 @@ class BaseDataset:
 
     @property
     def contents(self) -> str:
+        # The mixins package imports BaseDataset, so load it after class creation.
+        from unfold.mixins.action_model_admin import ActionModelAdminMixin
+
         if self.model_admin_instance.get_actions(self.request):
             action_form = self.model_admin_instance.action_form(auto_id=None)
             action_form.fields[
@@ -48,6 +51,11 @@ class BaseDataset:
                 "opts": self.model._meta,
                 "action_form": action_form,
                 "actions_selection_counter": True,
+                "actions_row": self.model_admin_instance._get_actions_row_context(
+                    self.request
+                )
+                if isinstance(self.model_admin_instance, ActionModelAdminMixin)
+                else [],
             },
         )
 

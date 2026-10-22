@@ -17,13 +17,84 @@ from example.models import (
     Task,
 )
 
+from unfold.admin import ModelAdmin
 from unfold.contrib.filters.admin import (
     RangeDateFilter,
     RangeDateTimeFilter,
     RangeNumericFilter,
+    RelatedOnlyDropdownFilter,
     SingleNumericFilter,
     SliderNumericFilter,
 )
+from unfold.sites import UnfoldAdminSite
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("field_path", ["profile", "categories"])
+@pytest.mark.parametrize("facet", [True, False])
+@pytest.mark.parametrize("selection", ["all", "first", "second"])
+def test_filters_related_only_dropdown(
+    admin_request,
+    user_factory,
+    profile_factory,
+    category_factory,
+    field_path,
+    facet,
+    selection,
+):
+    related_factory = profile_factory if field_path == "profile" else category_factory
+    first = related_factory(name="First")
+    second = related_factory(name="Second")
+    hidden = related_factory(name="Hidden")
+    related_factory(name="Unused")
+    for username, related, active in [
+        ("sample-first-a", first, True),
+        ("sample-first-b", first, True),
+        ("sample-second", second, True),
+        ("sample-hidden", hidden, False),
+    ]:
+        user = user_factory(username=username, is_active=active)
+        if field_path == "profile":
+            user.profile = related
+            user.save()
+        else:
+            user.categories.add(related)
+
+    class RelatedUserAdmin(ModelAdmin):
+        list_filter = [(field_path, RelatedOnlyDropdownFilter)]
+        list_filter_submit = True
+
+        def get_queryset(self, request):
+            return (
+                super()
+                .get_queryset(request)
+                .filter(is_active=True, username__startswith="sample-")
+            )
+
+    selected = {"all": "", "first": str(first.pk), "second": str(second.pk)}[selection]
+    admin_request.GET = admin_request.GET.copy()
+    admin_request.GET[f"{field_path}__id__exact"] = selected
+    if facet:
+        admin_request.GET["_facets"] = "True"
+    model_admin = RelatedUserAdmin(get_user_model(), UnfoldAdminSite())
+    response = model_admin.changelist_view(admin_request)
+    response.render()
+
+    assert response.status_code == HTTPStatus.OK
+    changelist = response.context_data["cl"]
+    spec = changelist.filter_specs[0]
+    form = next(spec.choices(changelist))["form"]
+    choices = dict(form.fields[spec.lookup_kwarg].choices)
+    assert set(choices) == {"", first.pk, second.pk}
+    assert choices[first.pk] == ("First (2)" if facet else "First")
+    assert choices[second.pk] == ("Second (1)" if facet else "Second")
+    assert form[spec.lookup_kwarg].value() == selected
+    expected = {
+        "all": {"sample-first-a", "sample-first-b", "sample-second"},
+        "first": {"sample-first-a", "sample-first-b"},
+        "second": {"sample-second"},
+    }[selection]
+    assert set(changelist.queryset.values_list("username", flat=True)) == expected
 
 
 ########################################################

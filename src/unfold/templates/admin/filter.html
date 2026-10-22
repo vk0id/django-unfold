@@ -13,10 +13,10 @@
         </h3>
     {% endif %}
 
-    {% for choice in choices %}
-        {% if choice.selected and spec.lookup_val.0 %}
-            <input type="hidden" name="{{ spec.lookup_kwarg }}" value="{{ spec.lookup_val.0 }}" />
-        {% endif %}
+    {% for parameter, values in preserved_parameters.items %}
+        {% for value in values %}
+            <input type="hidden" name="{{ parameter }}" value="{{ value }}" />
+        {% endfor %}
     {% endfor %}
 
     {% if horizontal %}

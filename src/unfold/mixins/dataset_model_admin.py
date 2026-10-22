@@ -5,8 +5,6 @@ from django.contrib.admin import ModelAdmin, helpers
 from django.contrib.admin.exceptions import DisallowedModelAdminToField
 from django.contrib.admin.options import TO_FIELD_VAR
 from django.contrib.admin.utils import unquote
-from django.contrib.admin.views import main
-from django.contrib.admin.views.main import IGNORED_PARAMS
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.utils.translation import gettext_lazy as _
@@ -27,15 +25,6 @@ class DatasetModelAdminMixin(ModelAdmin):
         self.request = request
         extra_context = extra_context or {}
         datasets = self.get_changeform_datasets(request)
-
-        # Monkeypatch IGNORED_PARAMS to add dataset page and search arguments into ignored params
-        ignored_params = []
-        for dataset in datasets:
-            ignored_params.append(f"{dataset.model._meta.model_name}-q")
-            ignored_params.append(f"{dataset.model._meta.model_name}-p")
-            ignored_params.append("_changelist_filters")
-
-        main.IGNORED_PARAMS = (*IGNORED_PARAMS, *ignored_params)
 
         rendered_datasets = []
         for dataset in datasets:

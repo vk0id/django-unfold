@@ -1,7 +1,9 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from html.parser import HTMLParser
 from http import HTTPStatus
 
 import pytest
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.urls import reverse_lazy
 from django.utils.timezone import now
@@ -9,6 +11,7 @@ from example.models import (
     ApprovalChoices,
     Category,
     ColorChoices,
+    FilterUser,
     Label,
     PriorityChoices,
     Project,
@@ -1004,3 +1007,88 @@ def test_filters_autocomplete_select_multiple_filter(
 
     for user in not_expected:
         assert not response.context_data["cl"].queryset.filter(username=user).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("horizontal", [False, True])
+@pytest.mark.parametrize(
+    "selected",
+    [
+        {"linked_status": "active"},
+        {"status__exact": "active"},
+        {"is_active__exact": "1"},
+        {"last_login__isnull": "True"},
+        {"last_login__gte": "2026-01-01", "last_login__lt": "2027-01-01"},
+    ],
+)
+def test_link_filters_survive_form_submission(
+    admin_client, user_factory, monkeypatch, selected, horizontal
+):
+    class LinkedStatusFilter(admin.SimpleListFilter):
+        title = "Linked status"
+        parameter_name = "linked_status"
+
+        def lookups(self, request, model_admin):
+            return StatusChoices.choices
+
+        def queryset(self, request, queryset):
+            if self.value():
+                return queryset.filter(status=self.value())
+            return queryset
+
+    model_admin = admin.site._registry[FilterUser]
+    filters = [LinkedStatusFilter, "status", "is_active", "last_login"]
+    monkeypatch.setattr(model_admin, "list_filter", filters)
+    monkeypatch.setattr(
+        model_admin,
+        "list_filter_options",
+        {
+            name: {"horizontal": horizontal}
+            for name in ("linked_status", "status", "is_active", "last_login")
+        },
+    )
+    user_factory.create(
+        username="active",
+        status=StatusChoices.ACTIVE,
+        is_active=True,
+        last_login=datetime(2026, 6, 1),
+    )
+    user_factory.create(
+        username="inactive",
+        status=StatusChoices.INACTIVE,
+        is_active=False,
+        last_login=None,
+    )
+    url = reverse_lazy("admin:example_filteruser_changelist")
+    response = admin_client.get(url, selected)
+    assert response.status_code == HTTPStatus.OK
+    expected = set(response.context_data["cl"].queryset.values_list("pk", flat=True))
+    submitted = {}
+
+    class FilterFormParser(HTMLParser):
+        in_filter_form = False
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "form":
+                self.in_filter_form = (
+                    attrs.get("oninput") == "this.submit()"
+                    if horizontal
+                    else attrs.get("id") == "filter-form"
+                )
+            if self.in_filter_form and tag == "input" and attrs.get("name"):
+                submitted.setdefault(attrs["name"], []).append(attrs.get("value", ""))
+
+        def handle_endtag(self, tag):
+            if tag == "form":
+                self.in_filter_form = False
+
+    FilterFormParser().feed(response.content.decode())
+    for parameter, value in selected.items():
+        assert submitted.get(parameter) == [value]
+    response = admin_client.get(url, submitted)
+    assert response.status_code == HTTPStatus.OK
+    assert (
+        set(response.context_data["cl"].queryset.values_list("pk", flat=True))
+        == expected
+    )

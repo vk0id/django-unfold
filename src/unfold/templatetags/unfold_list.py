@@ -473,6 +473,11 @@ def unfold_admin_list_filter(
             "title": spec.title,
             "choices": list(spec.choices(cl)),
             "spec": spec,
+            "preserved_parameters": {
+                name: values
+                for name, values in cl.filter_params.items()
+                if name in spec.used_parameters
+            },
             "label": options.get("label"),
             "has_label": "label" in options,
             "horizontal": options.get("horizontal") and horizontal_layout,

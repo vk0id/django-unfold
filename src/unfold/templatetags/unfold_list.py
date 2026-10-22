@@ -382,6 +382,7 @@ def result_list(context: dict[str, Any], cl: ChangeList) -> dict[str, Any]:
 
     return {
         "cl": cl,
+        "request": context["request"],
         "result_hidden_fields": list(result_hidden_fields(cl)),
         "result_headers": headers,
         "num_sorted_fields": num_sorted_fields,

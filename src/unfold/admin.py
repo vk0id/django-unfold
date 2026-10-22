@@ -136,6 +136,10 @@ class ModelAdmin(
 
         return response
 
+    def get_row_class(self, request: HttpRequest, obj: Model) -> str:
+        """Return additional CSS classes for an object's changelist or dataset row."""
+        return ""
+
     def get_list_display(self, request: HttpRequest) -> list | tuple:
         list_display = super().get_list_display(request)
 

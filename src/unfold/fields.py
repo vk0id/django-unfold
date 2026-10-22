@@ -24,7 +24,7 @@ from django.utils.module_loading import import_string
 from django.utils.safestring import SafeString, SafeText, mark_safe
 from django.utils.text import capfirst
 
-from unfold.utils import display_for_field, prettify_json
+from unfold.utils import display_for_field, display_for_label, prettify_json
 from unfold.widgets import (
     CHECKBOX_LABEL_CLASSES,
     LABEL_CLASSES,
@@ -140,7 +140,12 @@ class UnfoldAdminReadonlyField(helpers.AdminReadonlyField):
                     return widget.render(field, value)
 
             if f is None:
-                if getattr(attr, "boolean", False):
+                label = getattr(attr, "label", False)
+                if label:
+                    result_repr = display_for_label(
+                        value, self.empty_value_display, label
+                    )
+                elif getattr(attr, "boolean", False):
                     result_repr = _boolean_icon(value)
                 elif hasattr(value, "__html__"):
                     result_repr = value

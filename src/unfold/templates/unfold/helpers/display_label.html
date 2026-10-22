@@ -1,8 +1,10 @@
 {% if label %}
     {% if multiple %}
-        {% for item in label %}
-            {% include "unfold/helpers/label.html" with type=label_type text=item %}
-        {% endfor %}
+        <div class="flex flex-wrap gap-1">
+            {% for item in label %}
+                {% include "unfold/helpers/label.html" with type=label_type text=item %}
+            {% endfor %}
+        </div>
     {% else %}
         {% include "unfold/helpers/label.html" with type=label_type text=label %}
     {% endif %}

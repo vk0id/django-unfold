@@ -62,11 +62,8 @@ def display_for_label(value: Any, empty_value_display: str, label: Any) -> SafeT
 
     if isinstance(label, dict):
         if isinstance(value, tuple):
-            try:
-                label_type = label[value[0]]
-                value = value[1]
-            except KeyError:
-                value = value[0]
+            label_type = label.get(value[0])
+            value = value[1]
         elif value in label:
             label_type = label[value]
 

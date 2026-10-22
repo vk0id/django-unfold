@@ -32,26 +32,7 @@ class ActionModelAdminMixin(ModelAdmin):
         are displayed in the each row of the table.
         """
         extra_context = extra_context or {}
-        actions_row = []
-
-        for action in self.get_actions_row(request):
-            action_attrs = deepcopy(action.method.attrs)
-            extra_options = deepcopy(action.method.extra_options)
-
-            actions_row.append(
-                {
-                    "title": action.description,
-                    "icon": action.icon,
-                    "attrs": action_attrs,
-                    "dialog": action.dialog,
-                    "display_in_dropdown": extra_options.get(
-                        "display_in_dropdown", True
-                    ),
-                    # This is just a path name as string and in template is used in {% url %} tag
-                    # with custom instance pk value
-                    "raw_path": f"{self.admin_site.name}:{action.action_name}",
-                }
-            )
+        actions_row = self._get_actions_row_context(request)
 
         # `actions_list` may contain custom structure with dropdowns so it is needed
         # to use `_get_actions_navigation` to build the final structure for the template
@@ -165,6 +146,31 @@ class ActionModelAdminMixin(ModelAdmin):
         return self._filter_unfold_actions_by_permissions(
             request, self._get_base_actions_row()
         )
+
+    def _get_actions_row_context(self, request: HttpRequest) -> list[dict[str, Any]]:
+        """Prepare permission-filtered row actions for changelists and datasets."""
+        actions_row = []
+
+        for action in self.get_actions_row(request):
+            action_attrs = deepcopy(action.method.attrs)
+            extra_options = deepcopy(action.method.extra_options)
+
+            actions_row.append(
+                {
+                    "title": action.description,
+                    "icon": action.icon,
+                    "attrs": action_attrs,
+                    "dialog": action.dialog,
+                    "display_in_dropdown": extra_options.get(
+                        "display_in_dropdown", True
+                    ),
+                    # This is just a path name as string and in template is used in {% url %} tag
+                    # with custom instance pk value
+                    "raw_path": f"{self.admin_site.name}:{action.action_name}",
+                }
+            )
+
+        return actions_row
 
     def get_actions_submit_line(
         self, request: HttpRequest, object_id: int | str

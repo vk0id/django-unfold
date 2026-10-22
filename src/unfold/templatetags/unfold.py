@@ -199,6 +199,14 @@ def render_section(
     return section_class(context.request, instance).render()
 
 
+@register.simple_tag(takes_context=True)
+def result_row_class(context: RequestContext, cl: ChangeList, instance: Model) -> str:
+    if not hasattr(cl.model_admin, "get_row_class"):
+        return ""
+
+    return cl.model_admin.get_row_class(context["request"], instance)
+
+
 @register.simple_tag(name="has_nav_item_active")
 def has_nav_item_active(items: list) -> bool:
     for item in items:

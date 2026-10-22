@@ -22,6 +22,7 @@ from unfold.contrib.filters.admin.dropdown_filters import (
     MultipleDropdownFilter,
     MultipleRelatedDropdownFilter,
     RelatedDropdownFilter,
+    RelatedOnlyDropdownFilter,
 )
 from unfold.contrib.filters.admin.numeric_filters import (
     RangeNumericFilter,
@@ -43,6 +44,7 @@ __all__ = [
     "MultipleChoicesDropdownFilter",
     "DropdownFilter",
     "RelatedDropdownFilter",
+    "RelatedOnlyDropdownFilter",
     "MultipleDropdownFilter",
     "MultipleRelatedDropdownFilter",
     "RelatedCheckboxFilter",

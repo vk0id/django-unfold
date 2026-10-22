@@ -90,6 +90,7 @@ CONFIG_DEFAULTS = {
     "STYLES": [],
     "SCRIPTS": [],
     "USER_AVATAR": None,
+    "USER_BADGE_COUNT": None,
     "ACCOUNT": {
         "navigation": [],
     },

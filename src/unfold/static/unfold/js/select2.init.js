@@ -15,6 +15,23 @@
 			$(element).select2({
 				...(filterForm.length ? { dropdownParent: filterForm } : {}),
 			});
+
+			if (element.closest("#changelist-filter") && !element.form) {
+				$(element).on("change", () => {
+					const url = new URL(window.location.href);
+					url.searchParams.delete(element.name);
+
+					for (const option of element.selectedOptions) {
+						if (option.value !== "") {
+							url.searchParams.append(element.name, option.value);
+						}
+					}
+
+					// A changed filter must start at the first page of its results.
+					url.searchParams.delete("p");
+					window.location.assign(url);
+				});
+			}
 		});
 
 		return this;

@@ -22,11 +22,12 @@ from django.forms import ModelForm
 from django.template import Library
 from django.template.base import Parser, Token
 from django.template.loader import get_template, render_to_string
-from django.urls import NoReverseMatch
+from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html
 from django.utils.safestring import SafeText, mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from unfold.mixins.action_model_admin import ActionModelAdminMixin
 from unfold.utils import (
     display_for_dropdown,
     display_for_field,
@@ -380,13 +381,38 @@ def result_list(context: dict[str, Any], cl: ChangeList) -> dict[str, Any]:
         if h["sortable"] and h["sorted"]:
             num_sorted_fields += 1
 
+    rows = list(results(cl))
+    declarations = context.get("actions_row") or []
+
+    for row in rows:
+        row.actions_row = []
+        for declaration in declarations:
+            if "action" in declaration and isinstance(
+                cl.model_admin, ActionModelAdminMixin
+            ):
+                action_context = cl.model_admin._get_row_action_context(
+                    context["request"], row.instance, declaration
+                )
+            else:
+                # Preserve contexts supplied by existing template customizations.
+                action_context = {
+                    **declaration,
+                    "url": reverse(declaration["raw_path"], args=(row.instance.pk,)),
+                }
+            if action_context is not None:
+                attrs = dict(action_context.get("attrs") or {})
+                row.actions_row.append(
+                    {**action_context, "class": attrs.pop("class", ""), "attrs": attrs}
+                )
+
     return {
         "cl": cl,
         "result_hidden_fields": list(result_hidden_fields(cl)),
         "result_headers": headers,
         "num_sorted_fields": num_sorted_fields,
-        "results": list(results(cl)),
-        "actions_row": context.get("actions_row"),
+        "results": rows,
+        "actions_row": declarations,
+        "has_row_actions": any(row.actions_row for row in rows),
         "has_add_permission": cl.model_admin.has_add_permission(context["request"]),
     }
 

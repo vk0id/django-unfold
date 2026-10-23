@@ -57,5 +57,9 @@
                 </div>
             </th>
         {% endfor %}
+
+        {% if has_row_actions %}
+            <th scope="col"><span class="sr-only">{% translate "Actions" %}</span></th>
+        {% endif %}
     </tr>
 </thead>

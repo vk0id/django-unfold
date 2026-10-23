@@ -22,7 +22,7 @@ class="font-medium inline-flex group items-center gap-1 relative rounded-default
 {% else %}
     border border-base-200 bg-primary-600 border-transparent text-white {% if not attrs.disabled %}hover:bg-primary-600/80{% endif %}
 {% endif %}
-{% if class %} {{ class }}{% endif %}" {% include "unfold/helpers/attrs.html" %} {% if extra_attrs %}{{ extra_attrs }}{% endif %}>
+{% if class %} {{ class }}{% endif %}" {% if extra_attrs %}{{ extra_attrs }}{% endif %}>
 
 {% if icon %}<span class="material-symbols-outlined {% if size == "lg"%}-ml-2{% else %}-ml-0.5{% endif %}">{{ icon }}</span> {% endif %}
 {{ children }}

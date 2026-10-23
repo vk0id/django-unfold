@@ -196,6 +196,7 @@ class ModelAdmin(
                 name=action.action_name,
             )
             for action in self._get_base_actions_row()
+            if action.extra_options.get("register_route", True)
         ]
 
         return (

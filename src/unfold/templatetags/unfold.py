@@ -217,6 +217,14 @@ def has_active_item(items: list[dict]) -> bool:
     return False
 
 
+@register.simple_tag
+def row_action_url(action: dict, instance_pk: int | str) -> str | None:
+    """Resolve legacy declarations while preserving explicit URL-less buttons."""
+    if "url" in action:
+        return action["url"]
+    return reverse(action["raw_path"], args=(instance_pk,))
+
+
 @register.filter
 def has_row_action_in_dropdown(actions: list[dict]) -> bool:
     return any(action.get("display_in_dropdown", True) for action in actions)

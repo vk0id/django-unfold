@@ -15,7 +15,7 @@
                 <tbody class="relative {% cycle '' 'bg-base-50 dark:bg-white/[.02]' %}" x-data="{rowOpen: false}" {% if cl.model_admin.ordering_field %}x-sort:item{% endif %}>
                     {% if result.form and result.form.non_field_errors %}
                         <tr>
-                            <td class="text-start" colspan="{{ result|length }}">
+                            <td class="text-start" colspan="{% if has_row_actions %}{{ result|length|add:'1' }}{% else %}{{ result|length }}{% endif %}">
                                 {{ result.form.non_field_errors }}
                             </td>
                         </tr>
@@ -43,7 +43,9 @@
                             {{ item }}
                         {% endfor %}
 
-                        {% include 'unfold/helpers/actions_row.html' with actions=actions_row instance_pk=result.instance.pk %}
+                        {% if has_row_actions %}
+                            {% include 'unfold/helpers/actions_row.html' with actions=result.actions_row instance_pk=result.instance.pk show_cell=True %}
+                        {% endif %}
                     </tr>
 
                     {% if cl.model_admin.list_sections|length > 0 %}

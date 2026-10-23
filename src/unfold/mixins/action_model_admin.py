@@ -32,26 +32,7 @@ class ActionModelAdminMixin(ModelAdmin):
         are displayed in the each row of the table.
         """
         extra_context = extra_context or {}
-        actions_row = []
-
-        for action in self.get_actions_row(request):
-            action_attrs = deepcopy(action.method.attrs)
-            extra_options = deepcopy(action.method.extra_options)
-
-            actions_row.append(
-                {
-                    "title": action.description,
-                    "icon": action.icon,
-                    "attrs": action_attrs,
-                    "dialog": action.dialog,
-                    "display_in_dropdown": extra_options.get(
-                        "display_in_dropdown", True
-                    ),
-                    # This is just a path name as string and in template is used in {% url %} tag
-                    # with custom instance pk value
-                    "raw_path": f"{self.admin_site.name}:{action.action_name}",
-                }
-            )
+        actions_row = self._get_actions_row_context(request)
 
         # `actions_list` may contain custom structure with dropdowns so it is needed
         # to use `_get_actions_navigation` to build the final structure for the template
@@ -165,6 +146,65 @@ class ActionModelAdminMixin(ModelAdmin):
         return self._filter_unfold_actions_by_permissions(
             request, self._get_base_actions_row()
         )
+
+    def _get_row_action_metadata(self, action: UnfoldAction) -> dict[str, Any]:
+        return {
+            "title": action.description,
+            "icon": action.icon,
+            "attrs": deepcopy(action.attrs or {}),
+            "dialog": deepcopy(action.dialog),
+            "display_in_dropdown": action.extra_options.get(
+                "display_in_dropdown", True
+            ),
+            "raw_path": f"{self.admin_site.name}:{action.action_name}",
+        }
+
+    def _get_actions_row_context(self, request: HttpRequest) -> list[dict[str, Any]]:
+        """Prepare permission-filtered declarations, retaining legacy context keys."""
+        return [
+            {"action": action, **self._get_row_action_metadata(action)}
+            for action in self.get_actions_row(request)
+        ]
+
+    def _get_row_action_context(
+        self, request: HttpRequest, obj: Model, declaration: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        action = declaration["action"]
+        context = self.get_row_action_context(request, obj, action)
+        if context is None:
+            return None
+
+        # Existing changelist overrides may post-process these declarations.
+        metadata = self._get_row_action_metadata(action)
+        overrides = {
+            key: deepcopy(value)
+            for key, value in declaration.items()
+            if key != "action" and value != metadata.get(key)
+        }
+        if "attrs" in overrides:
+            attrs = dict(context.get("attrs") or {})
+            declared_attrs = overrides["attrs"] or {}
+            for key in metadata["attrs"].keys() - declared_attrs.keys():
+                attrs.pop(key, None)
+            for key, value in declared_attrs.items():
+                if key not in metadata["attrs"] or value != metadata["attrs"][key]:
+                    attrs[key] = value
+            overrides["attrs"] = attrs
+        if "raw_path" in overrides:
+            overrides["url"] = reverse(overrides["raw_path"], args=(obj.pk,))
+        return {**context, **overrides}
+
+    def get_row_action_context(
+        self, request: HttpRequest, obj: Model, action: UnfoldAction
+    ) -> dict[str, Any] | None:
+        """Customize an action for one row; None hides it and url=None renders a button."""
+        context = self._get_row_action_metadata(action)
+        context["url"] = (
+            reverse(context["raw_path"], args=(obj.pk,))
+            if action.extra_options.get("register_route", True)
+            else None
+        )
+        return context
 
     def get_actions_submit_line(
         self, request: HttpRequest, object_id: int | str

@@ -1,15 +1,19 @@
 {% load i18n unfold %}
 
-{% if actions %}
+{% if actions or show_cell %}
     <td class="field-actions_holder align-middle border-t border-base-200 px-3 py-2 dark:border-base-800 w-px lg:py-3">
         {% with action_id=instance_pk|cut:"-" %}
             <div class="flex flex-row gap-1 items-center">
                 {% for action in actions %}
                     {% if not action.display_in_dropdown %}
-                        {% url action.raw_path instance_pk as action_url %}
-                        {% component "unfold/components/button.html" with href=action_url size="xs" variant="default" icon=action.icon class="self-center lg:-my-2"%}
-                            {{ action.title }}
-                        {% endcomponent %}
+                        {% row_action_url action instance_pk as action_url %}
+                        {% with extra_class=action.class|default:"" %}
+                            {% with action_class="self-center lg:-my-2 "|add:extra_class %}
+                                {% component "unfold/components/button.html" with href=action_url type="button" attrs=action.attrs size="xs" variant="default" icon=action.icon class=action_class%}
+                                    {{ action.title }}
+                                {% endcomponent %}
+                            {% endwith %}
+                        {% endwith %}
                     {% endif %}
                 {% endfor %}
 
@@ -25,24 +29,25 @@
                             <nav x-anchor.bottom-end.offset.4="$refs.rowDropdown{{ action_id }}" class="bg-white border border-base-200 flex flex-col py-1 rounded-default shadow-lg text-sm top-7 z-50 w-48 dark:bg-base-800 dark:border-base-700" x-cloak x-show="openActionsId{{ action_id }}" x-transition x-on:click.outside="openActionsId{{ action_id }} = false">
                                 {% for action in actions %}
                                     {% if action.display_in_dropdown %}
-                                        <a href="{% url action.raw_path instance_pk %}"
-                                           {% if action.dialog %}
-                                               hx-get="{% url action.raw_path instance_pk %}"
-                                               hx-target="#modal-content"
-                                               hx-select="#dialog"
-                                               x-on:htmx:after-on-load="openModal = true"
-                                           {% endif %}
-                                           class="flex items-center gap-2 mx-1 px-3 py-2 max-h-[30px] rounded-default hover:bg-base-100 dark:hover:bg-base-700 dark:hover:text-base-200"{% for attr_name, attr_value in action.attrs.items %} {{ attr_name }}="{{ attr_value }}"{% endfor %}>
-                                            {% if action.icon %}
-                                                <span class="material-symbols-outlined">
-                                                    {{ action.icon }}
-                                                </span>
-                                            {% endif %}
-
-                                            <span class="grow truncate">
-                                                {{ action.title }}
+                                        {% row_action_url action instance_pk as action_url %}
+                                        <{% if action_url is None %}button type="button"{% else %}a href="{{ action_url }}"{% endif %}
+                                        {% if action.dialog and action_url %}
+                                            hx-get="{{ action_url }}"
+                                            hx-target="#modal-content"
+                                            hx-select="#dialog"
+                                            x-on:htmx:after-on-load="openModal = true"
+                                        {% endif %}
+                                        class="flex items-center text-start gap-2 mx-1 px-3 py-2 max-h-[30px] rounded-default hover:bg-base-100 dark:hover:bg-base-700 dark:hover:text-base-200 {{ action.class }}"{% include "unfold/helpers/attrs.html" with attrs=action.attrs %}>
+                                        {% if action.icon %}
+                                            <span class="material-symbols-outlined">
+                                                {{ action.icon }}
                                             </span>
-                                        </a>
+                                        {% endif %}
+
+                                        <span class="grow truncate">
+                                            {{ action.title }}
+                                        </span>
+                                        </{% if action_url is None %}button{% else %}a{% endif %}>
                                     {% endif %}
                                 {% endfor %}
                             </nav>

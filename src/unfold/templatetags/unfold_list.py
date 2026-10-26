@@ -238,7 +238,12 @@ def items_for_result(  # noqa: PLR0915, PLR0912
                     row_classes.append("tabular-nums")
 
                 if label:
-                    result_repr = display_for_label(value, empty_value_display, label)
+                    result_repr = display_for_label(
+                        value,
+                        empty_value_display,
+                        label,
+                        label_max_length=getattr(attr, "label_max_length", None),
+                    )
                 elif dropdown:
                     result_repr = display_for_dropdown(
                         result, field_name, value, empty_value_display

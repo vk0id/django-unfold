@@ -144,10 +144,18 @@ def display(
     empty_value: str | None = None,
     dropdown: bool | None = None,
     label: "bool | StrOrPromise | dict[str, str] | None" = None,
+    label_max_length: int | None = None,
     header: bool | None = None,
     wrapper_class: str | None = None,
     formatting: str | None = None,
 ) -> Callable:
+    if label_max_length is not None and (
+        isinstance(label_max_length, bool)
+        or not isinstance(label_max_length, int)
+        or label_max_length <= 0
+    ):
+        raise ValueError("label_max_length must be a positive integer or None.")
+
     def decorator(func: Callable[[Model], Any]) -> Callable:
         if boolean is not None and empty_value is not None:
             raise ValueError(
@@ -166,6 +174,8 @@ def display(
             func.empty_value_display = empty_value
         if label is not None:
             func.label = label
+        if label_max_length is not None:
+            func.label_max_length = label_max_length
         if header is not None:
             func.header = header
         if dropdown is not None:

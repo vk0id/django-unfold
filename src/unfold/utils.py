@@ -2,17 +2,21 @@ import datetime
 import decimal
 import json
 from collections.abc import Callable, Iterable
+from html import unescape
 from typing import Any
+from unicodedata import normalize
 
 from django.conf import settings
 from django.db import models
 from django.db.models import Model
 from django.template.loader import render_to_string
 from django.utils import formats, timezone
+from django.utils.encoding import force_str
 from django.utils.hashable import make_hashable
-from django.utils.html import format_html
+from django.utils.html import escape, format_html, strip_tags
 from django.utils.module_loading import import_string
 from django.utils.safestring import SafeString, SafeText, mark_safe
+from django.utils.text import Truncator
 
 from unfold.exceptions import UnfoldException
 from unfold.settings import get_config
@@ -56,7 +60,12 @@ def display_for_dropdown(
     )
 
 
-def display_for_label(value: Any, empty_value_display: str, label: Any) -> SafeText:
+def display_for_label(
+    value: Any,
+    empty_value_display: str,
+    label: Any,
+    label_max_length: int | None = None,
+) -> SafeText:
     label_type = None
     multiple = False
 
@@ -73,6 +82,27 @@ def display_for_label(value: Any, empty_value_display: str, label: Any) -> SafeT
     if isinstance(value, tuple) or isinstance(value, list):
         multiple = True
 
+    limited_labels = None
+    if label_max_length is not None:
+        limited_labels = []
+        for caption in value if multiple else [value]:
+            text = force_str(caption)
+            is_html = isinstance(text, SafeString)
+            plain_text = unescape(strip_tags(text)) if is_html else text
+            title = None
+            shortened = Truncator(plain_text).chars(label_max_length, truncate="…")
+            if shortened != normalize("NFC", plain_text):
+                if is_html:
+                    text = mark_safe(
+                        Truncator(text).chars(label_max_length, truncate="…", html=True)
+                    )
+                else:
+                    text = shortened
+                title = escape(plain_text)
+            else:
+                text = caption
+            limited_labels.append({"text": text, "title": title})
+
     return mark_safe(
         render_to_string(
             "unfold/helpers/display_label.html",
@@ -80,6 +110,7 @@ def display_for_label(value: Any, empty_value_display: str, label: Any) -> SafeT
                 "label": value,
                 "label_type": label_type,
                 "multiple": multiple,
+                "limited_labels": limited_labels,
             },
         )
     )

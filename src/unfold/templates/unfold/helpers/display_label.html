@@ -1,5 +1,9 @@
 {% if label %}
-    {% if multiple %}
+    {% if limited_labels %}
+        {% for item in limited_labels %}
+            {% include "unfold/helpers/label.html" with type=label_type text=item.text label_title=item.title %}
+        {% endfor %}
+    {% elif multiple %}
         {% for item in label %}
             {% include "unfold/helpers/label.html" with type=label_type text=item %}
         {% endfor %}
